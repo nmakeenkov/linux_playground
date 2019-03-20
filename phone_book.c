@@ -24,10 +24,11 @@ struct file_operations fops =
 
 int majorNum;
 
-struct Records* records = NULL;
+struct list_head records;
 
 static int __init init(void)
 {
+    INIT_LIST_HEAD(&records);
     majorNum = register_chrdev(0, "phone_book", &fops);
     if (majorNum < 0)
     {
@@ -41,24 +42,24 @@ static int __init init(void)
     }
 }
 
-void clearRecords(struct Records* records)
+void clearRecords(void)
 {
-    if (records == NULL)
+    struct list_head* cur;
+    struct list_head* cur_safe;
+    struct Records* entry;
+    list_for_each_safe(cur, cur_safe, &records)
     {
-        return;
+        entry = list_entry(cur, struct Records, list);
+        kfree(entry->record.name.chars);
+        kfree(entry->record.number.chars);
+        list_del(cur);
     }
-    clearRecords(records->next);
-
-    kfree(records->record.name.chars);
-    kfree(records->record.number.chars);
-    kfree(records->next);
 }
 
 static void __exit exit(void)
 {
     unregister_chrdev(majorNum, "phone_book");
-    clearRecords(records);
-    records = NULL;
+    clearRecords();
 }
 
 #define COMMAND_MAX_SIZE 1023
@@ -92,21 +93,9 @@ void addRecord(size_t numberStart, size_t numberEnd, size_t nameStart, size_t na
     newRecord.name.chars[nameEnd - nameStart] = '\0';
     
     struct Records* node = (struct Records*) kmalloc(sizeof(struct Records), GFP_KERNEL);
-    node->next = NULL;
     node->record = newRecord;
-    if (records == NULL)
-    {
-        records = node;
-    }
-    else
-    {
-        struct Records* cur = records;
-        while (cur->next != NULL)
-        {
-            cur = cur->next;
-        }
-        cur->next = node;
-    }
+    INIT_LIST_HEAD(&node->list);
+    list_add(&node->list, &records);
 }
 
 #define NOT_FOUND "person not found\n"
@@ -139,15 +128,16 @@ void addNotFoundResponse(size_t nameStart, size_t nameEnd)
 
 void findRecord(size_t nameStart, size_t nameEnd)
 {
-    struct Records* cur = records;
-    while (cur != NULL)
+    struct list_head* cur;
+    struct Records* entry;
+    for (cur = records.next; cur != &records; cur = cur->next)
     {
-        if (memcmp(cur->record.name.chars, command + nameStart, nameEnd - nameStart) == 0)
+        entry = list_entry(cur, struct Records, list);
+        if (memcmp(entry->record.name.chars, command + nameStart, nameEnd - nameStart) == 0)
         {
-            addResponse(&cur->record);
+            addResponse(&entry->record);
             return;
         }
-        cur = cur->next;
     }
     addNotFoundResponse(nameStart, nameEnd);
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <linux/list.h>
 
 struct String
 {
@@ -14,6 +15,5 @@ struct Record
 struct Records
 {
     struct Record record;
-    struct Records* next;
+    struct list_head list;
 };
-
