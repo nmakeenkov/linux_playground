@@ -51,7 +51,7 @@ void clearRecords(void)
     {
         entry = list_entry(cur, struct Records, list);
         kfree(entry->record.name.chars);
-        kfree(entry->record.number.chars);
+        kfree(entry->record.data.chars);
         list_del(cur);
     }
 }
@@ -82,12 +82,12 @@ static int deviceRelease(struct inode* inode, struct file* file)
     return 0;
 }
 
-void addRecord(size_t numberStart, size_t numberEnd, size_t nameStart, size_t nameEnd)
+void addRecord(size_t dataStart, size_t dataEnd, size_t nameStart, size_t nameEnd)
 {
     struct Record newRecord;
-    newRecord.number.chars = (char*) kmalloc(numberEnd - numberStart + 1, GFP_KERNEL);
-    memcpy(newRecord.number.chars, command + numberStart, numberEnd - numberStart);
-    newRecord.number.chars[numberEnd - numberStart] = '\0';
+    newRecord.data.chars = (char*) kmalloc(dataEnd - dataStart + 1, GFP_KERNEL);
+    memcpy(newRecord.data.chars, command + dataStart, dataEnd - dataStart);
+    newRecord.data.chars[dataEnd - dataStart] = '\0';
     newRecord.name.chars = (char*) kmalloc(nameEnd - nameStart + 1, GFP_KERNEL);
     memcpy(newRecord.name.chars, command + nameStart, nameEnd - nameStart);
     newRecord.name.chars[nameEnd - nameStart] = '\0';
@@ -112,7 +112,7 @@ void addResponse(const struct Record* record)
 {
     addString(record->name.chars);
     addString(" ");
-    addString(record->number.chars);
+    addString(record->data.chars);
     addString("\n");
 }
 
@@ -140,6 +140,21 @@ void findRecord(size_t nameStart, size_t nameEnd)
         }
     }
     addNotFoundResponse(nameStart, nameEnd);
+}
+
+void removeRecord(size_t nameStart, size_t nameEnd)
+{
+    struct list_head* cur;
+    struct Records* entry;
+    for (cur = records.next; cur != &records; cur = cur->next)
+    {
+        entry = list_entry(cur, struct Records, list);
+        if (memcmp(entry->record.name.chars, command + nameStart, nameEnd - nameStart) == 0)
+        {
+            list_del(cur);
+            return;
+        }
+    }
 }
 
 void cleanFirstSymbols(size_t symbolCount)
@@ -176,20 +191,20 @@ void trimCommand(void)
 void tryExecuteCommand(void)
 {
     trimCommand();
-    if (curCommandIdx > 1 && (command[0] == 'a' || command[0] == 'f') && command[1] == ' ')
+    if (curCommandIdx > 1 && (command[0] == 'a' || command[0] == 'f' || command[0] == 'd') && command[1] == ' ')
     {
         // add or find
-        size_t numberStart = 2;
-        size_t numberEnd = 2;
+        size_t dataStart = 2;
+        size_t dataEnd = 2;
         size_t nameStart;
         size_t nameEnd;
         if (command[0] == 'a')
         {
-            while (numberEnd < curCommandIdx && command[numberEnd] != ' ')
+            while (dataEnd < curCommandIdx && command[dataEnd] != ' ')
             {
-                ++numberEnd;
+                ++dataEnd;
             }
-            nameStart = numberEnd + 1;
+            nameStart = dataEnd + 1;
         }
         else
         {
@@ -207,12 +222,16 @@ void tryExecuteCommand(void)
         }
         if (command[0] == 'a')
         {
-            addRecord(numberStart, numberEnd, nameStart, nameEnd);
+            addRecord(nameStart, nameEnd, dataStart, dataEnd);
         }
-        else
+        else if (command[0] == 'f')
         {
             findRecord(nameStart, nameEnd);
         }
+        else
+        {
+            removeRecord(nameStart, nameEnd);
+        } 
     }
     cleanFirstCommand();
 }

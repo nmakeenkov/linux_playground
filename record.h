@@ -9,7 +9,7 @@ struct String
 struct Record
 {
     struct String name;
-    struct String number;
+    struct String data;
 };
 
 struct Records
